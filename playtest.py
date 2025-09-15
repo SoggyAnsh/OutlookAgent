@@ -19,13 +19,13 @@ OUT = Path("chartifacts")
 OUT.mkdir(parents=True, exist_ok=True)
 ENABLE_TRACE = False
 
-FIRST_NAME = "Jonathan"
-LAST_NAME = "Crackerson"
-EMAIL = "jonathan_crawson33@outlook.com"
-PASSWORD = "JohnTrumbo@65"
+FIRST_NAME = "Abuel"
+LAST_NAME = "Nexus"
+EMAIL = f"{FIRST_NAME.lower()}_{LAST_NAME.lower()}9839@outlook.com"
+PASSWORD = "AbleNexus@65"
 COUNTRY = "Mexico"
-DOB_DAY = "17"
-DOB_MONTH = "September"
+DOB_DAY = "19"
+DOB_MONTH = "January"
 DOB_YEAR = "1992"
 
 FULLSCREEN = True
@@ -47,14 +47,13 @@ except Exception as _e:
     log.warning("pyautogui unavailable: %s", _e)
     _HAS_PYAUTO = False
 
-# --- calibrated CSS->screen mapping (added) ---
+# --- calibrated CSS->screen mapping ---
 _CAL_DPR: float = 1.0
-_CAL_XOFF_CSS: float = 0.0  # viewport-left in screen CSS px
-_CAL_YOFF_CSS: float = 0.0  # viewport-top  in screen CSS px
+_CAL_XOFF_CSS: float = 0.0
+_CAL_YOFF_CSS: float = 0.0
 
 
 def _update_css_screen_calibration(page) -> None:
-    """Compute CSS->screen mapping once per window."""
     global _CAL_DPR, _CAL_XOFF_CSS, _CAL_YOFF_CSS
     vals = page.evaluate("""() => ({
         dpr: window.devicePixelRatio || 1,
@@ -63,14 +62,10 @@ def _update_css_screen_calibration(page) -> None:
         iw: window.innerWidth, ih: window.innerHeight
     })""")
     _CAL_DPR = float(vals["dpr"]) or 1.0
-
-    # Approximate left/right borders as equal compute top chrome as the rest.
     left_border_css = max(0.0, (vals["ow"] - vals["iw"]) / 2.0)
     top_chrome_css = max(0.0, (vals["oh"] - vals["ih"]) - left_border_css)
-
     _CAL_XOFF_CSS = float(vals["sx"]) + left_border_css
     _CAL_YOFF_CSS = float(vals["sy"]) + top_chrome_css
-
     log.info(
         "MAP | dpr=%.3f offs_css=(%.1f,%.1f) outer=%dx%d inner=%dx%d screenXY=(%d,%d)",
         _CAL_DPR, _CAL_XOFF_CSS, _CAL_YOFF_CSS,
@@ -79,14 +74,14 @@ def _update_css_screen_calibration(page) -> None:
 
 
 def _css_to_screen(page, x_css: float, y_css: float) -> Tuple[int, int]:
-    # Convert a point in the viewport (CSS px) to physical screen px using the calibration above.
     sx = int(round((_CAL_XOFF_CSS + x_css) * _CAL_DPR))
     sy = int(round((_CAL_YOFF_CSS + y_css) * _CAL_DPR))
     return sx, sy
 
 
 def _pyauto_click_css(page, x_css: float, y_css: float, label: str):
-    if not _HAS_PYAUTO: return False
+    if not _HAS_PYAUTO:
+        return False
     sx, sy = _css_to_screen(page, x_css, y_css)
     log.info("%s | pyautogui.click screen=(%d,%d) from css=(%.1f,%.1f)", label, sx, sy, x_css, y_css)
     try:
@@ -132,7 +127,8 @@ def bbox(locator) -> Tuple[float, float, float, float]:
     if not box:
         time.sleep(0.2)
         box = locator.bounding_box()
-    if not box: return (0, 0, 0, 0)
+    if not box:
+        return (0, 0, 0, 0)
     return (box["x"], box["y"], box["width"], box["height"])
 
 
@@ -140,8 +136,15 @@ def safe_click(locator, step_name: str, page, also_snap=True):
     locator.wait_for(state="visible", timeout=10_000)
     box = bbox(locator)
     log.info("%s | click @ (x=%.1f,y=%.1f,w=%.1f,h=%.1f)", step_name, *box)
-    locator.click()
-    if also_snap: snap_and_annotate(page, [box], step_name)
+    cx = box[0] + box[2] / 2.0
+    cy = box[1] + box[3] / 2.0
+    if _HAS_PYAUTO:
+        _pyauto_move_css(page, cx, cy, f"{step_name}_move")
+        _pyauto_click_css(page, cx, cy, f"{step_name}_click")
+    else:
+        locator.click()
+    if also_snap:
+        snap_and_annotate(page, [box], step_name)
 
 
 def safe_type(locator, text: str, step_name: str, page, also_snap=True):
@@ -150,7 +153,8 @@ def safe_type(locator, text: str, step_name: str, page, also_snap=True):
     box = bbox(locator)
     log.info("%s | type '%s' @ (x=%.1f,y=%.1f,w=%.1f,h=%.1f)", step_name, text, *box)
     locator.type(text, delay=20)
-    if also_snap: snap_and_annotate(page, [box], step_name)
+    if also_snap:
+        snap_and_annotate(page, [box], step_name)
 
 
 # --- ARIA combobox utilities ---
@@ -167,7 +171,7 @@ def _find_combo(page, names):
         if sel:
             loc = page.locator(sel)
             try:
-                loc.wait_for(state="visible", timeout=3_000);
+                loc.wait_for(state="visible", timeout=3_000)
                 return loc
             except PWTimeoutError:
                 pass
@@ -179,7 +183,8 @@ def _find_combo(page, names):
         except PWTimeoutError:
             pass
     for n in names:
-        if "/" in n: continue
+        if "/" in n:
+            continue
         try:
             cb = page.get_by_role("combobox", name=re.compile(rf"^{re.escape(n)}$", re.I))
             cb.wait_for(state="visible", timeout=3_000)
@@ -191,9 +196,17 @@ def _find_combo(page, names):
 
 def _open_combo_with_fallback(combo, page):
     try:
-        combo.click()
+        box = bbox(combo)
+        cx = box[0] + box[2] / 2.0
+        cy = box[1] + box[3] / 2.0
+        if _HAS_PYAUTO:
+            _pyauto_move_css(page, cx, cy, "combo_open_move")
+            _pyauto_click_css(page, cx, cy, "combo_open_click")
+        else:
+            combo.click()
     except (PWTimeoutError, PWError):
         pass
+
     combo.focus()
     for key in ["Enter", "Alt+ArrowDown"]:
         combo.press(key)
@@ -202,8 +215,15 @@ def _open_combo_with_fallback(combo, page):
             return
         except PWTimeoutError:
             continue
+
     box = bbox(combo)
-    combo.click(position={"x": max(1, box[2] - 10), "y": max(1, box[3] / 2)}, force=True)
+    px = box[0] + max(1, box[2] - 10)
+    py = box[1] + box[3] / 2.0
+    if _HAS_PYAUTO:
+        _pyauto_move_css(page, px, py, "combo_open_edge_move")
+        _pyauto_click_css(page, px, py, "combo_open_edge_click")
+    else:
+        combo.click(position={"x": max(1, box[2] - 10), "y": max(1, box[3] / 2)}, force=True)
 
 
 def ensure_listbox_closed(page):
@@ -221,8 +241,10 @@ def ensure_listbox_closed(page):
 
 def choose_from_combobox(page, name: str, value: str, step: str):
     names = [name]
-    if name.lower() == "month": names = ["Month", "Birth month"]
-    if name.lower() == "day": names = ["Day", "Birth day"]
+    if name.lower() == "month":
+        names = ["Month", "Birth month"]
+    if name.lower() == "day":
+        names = ["Day", "Birth day"]
     combo = _find_combo(page, names)
     cbox = bbox(combo)
     log.info("%s | open '%s' @ (x=%.1f,y=%.1f,w=%.1f,h=%.1f)", step, name, *cbox)
@@ -232,7 +254,13 @@ def choose_from_combobox(page, name: str, value: str, step: str):
     option.scroll_into_view_if_needed()
     obox = bbox(option)
     log.info("%s | choose '%s' @ (x=%.1f,y=%.1f,w=%.1f,h=%.1f)", step, value, *obox)
-    option.click()
+    ocx = obox[0] + obox[2] / 2.0
+    ocy = obox[1] + obox[3] / 2.0
+    if _HAS_PYAUTO:
+        _pyauto_move_css(page, ocx, ocy, f"{step}_option_move")
+        _pyauto_click_css(page, ocx, ocy, f"{step}_option_click")
+    else:
+        option.click()
     try:
         expect(combo).to_have_text(re.compile(re.escape(value), re.I), timeout=3_000)
     except AssertionError:
@@ -240,7 +268,6 @@ def choose_from_combobox(page, name: str, value: str, step: str):
     snap_and_annotate(page, [cbox, obox], f"{step}_selected")
 
 
-# --- Year ---
 def find_year_input(page):
     candidates = [
         page.get_by_role("spinbutton", name="Birth year", exact=True),
@@ -251,7 +278,7 @@ def find_year_input(page):
     ]
     for loc in candidates:
         try:
-            loc.wait_for(state="visible", timeout=1500);
+            loc.wait_for(state="visible", timeout=1500)
             return loc
         except PWTimeoutError:
             continue
@@ -277,7 +304,7 @@ def _scan_all(page, css_list, timeout_ms=4000):
         for ctx in [page, *page.frames]:
             for css in css_list:
                 try:
-                    return _first_visible(ctx, css, timeout_ms=250)  # small per-attempt wait
+                    return _first_visible(ctx, css, timeout_ms=250)
                 except PWTimeoutError as e:
                     last_err = e
         time.sleep(0.05)
@@ -314,7 +341,6 @@ def _press_hold_button(page):
 
 
 def solve_human_check(page):
-    # Prefer the non-disabled Accessible button (sometimes there is a disabled twin).
     acc_css = [
         "[role='button'][aria-label='Accessible challenge']:visible",
         "[role='button'][aria-label*='Accessible' i]:visible",
@@ -325,11 +351,9 @@ def solve_human_check(page):
         "a[role='button'][aria-label*='Accessible' i]:not([aria-disabled='true'])",
     ]
     try:
-        # 1) Find & scroll the Accessible button into view
         acc_btn = _scan_all(page, acc_css, timeout_ms=14000)
         acc_btn.scroll_into_view_if_needed()
 
-        # Move first, then click (pyautogui). Fallback to Patchright if pyautogui unavailable.
         abox = bbox(acc_btn)
         ax = abox[0] + abox[2] / 2.0
         ay = abox[1] + abox[3] / 2.0
@@ -343,7 +367,6 @@ def solve_human_check(page):
         snap_and_annotate(page, [abox], "step_13_accessible_challenge_target")
 
     except PWTimeoutError:
-        # If the explicit button isn’t found, use your geometric fallback near the big "Press and hold" widget
         _dump_visible_buttons(page, "step_13_buttons_list")
         ph = _press_hold_button(page)
         if not ph:
@@ -356,8 +379,7 @@ def solve_human_check(page):
             time.sleep(0.5)
             _pyauto_click_css(page, x_css, y_css, "step_13_accessible_challenge_os_click")
         else:
-            log.info("step_13_accessible_challenge_fallback | page.mouse click")
-            page.mouse.click(x_css, y_css)
+            _pyauto_click_css(page, x_css, y_css, "step_13_accessible_challenge_os_click_no_pyauto_fallback")
         snap_and_annotate(page, [(x_css - 10, y_css - 10, 20, 20)], "step_13_accessible_challenge_fallback")
 
     page.wait_for_timeout(9_000)
@@ -368,7 +390,6 @@ def solve_human_check(page):
     try:
         pa_btn = _scan_all(page, press_again_css, timeout_ms=7000)
     except PWTimeoutError:
-        # Fallback: role+text across frames if aria-label isn’t present
         pa_btn = None
         for ctx in _all_contexts(page):
             cand = ctx.get_by_role("button", name=re.compile(r"^Press again$", re.I)).first
@@ -393,81 +414,99 @@ def solve_human_check(page):
     snap_and_annotate(page, [pbox], "step_14_press_again_target")
 
 
+def _find_button_any(page, name_regex, timeout_ms=4000):
+    """Return a *fresh* visible button locator across dynamic frames, or None."""
+    deadline = time.monotonic() + (timeout_ms / 1000.0)
+    while time.monotonic() < deadline:
+        for ctx in [page, *page.frames]:
+            try:
+                btn = ctx.get_by_role("button", name=name_regex).first
+                btn.wait_for(state="visible", timeout=250)
+                return btn
+            except (PWTimeoutError, PWError):
+                continue
+        time.sleep(0.05)
+    return None
+
+
 def handle_quick_note(page) -> bool:
-    """Optionally dismiss 'A quick note about your account page' by clicking OK."""
-    # Prefer detecting the heading (if present), but fall back to 'OK' button alone.
-    try:
-        # Try to spot the heading in any frame
-        found_heading = False
-        for ctx in [page, *page.frames]:
-            hdr = ctx.get_by_role("heading", name=re.compile(r"quick note about your account page", re.I)).first
-            if hdr.count():
-                hdr.wait_for(state="visible", timeout=2000)
-                found_heading = True
-                break
+    """Click 'OK' on 'A quick note about your account' if present (buttons only)."""
+    hdr_rx = re.compile(r"quick note", re.I)
+    ok_rx = re.compile(r"^OK$", re.I)
 
-        # Find an OK button (in any context)
-        ok_btn = None
-        for ctx in [page, *page.frames]:
-            cand = ctx.get_by_role("button", name=re.compile(r"^OK$", re.I)).first
-            if cand.count():
-                cand.wait_for(state="visible", timeout=2000)
-                ok_btn = cand
-                break
+    saw_hdr = False
+    for ctx in [page, *page.frames]:
+        try:
+            hdr = ctx.get_by_role("heading", name=hdr_rx).first
+            hdr.wait_for(state="visible", timeout=250)
+            saw_hdr = True
+            break
+        except (PWTimeoutError, PWError):
+            continue
 
-        if ok_btn is None:
-            if found_heading:
-                log.info("Quick note detected but no OK button visible yet.")
-            else:
-                log.info("No 'Quick note' screen detected.")
-            return False
-
-        abox = bbox(ok_btn)
-        ax = abox[0] + abox[2] / 2.0
-        ay = abox[1] + abox[3] / 2.0
-        if _HAS_PYAUTO:
-            _pyauto_move_css(page, ax, ay, "step_15_quick_note_ok_move")
-            time.sleep(0.4)
-            _pyauto_click_css(page, ax, ay, "step_15_quick_note_ok_click")
+    ok = _find_button_any(page, ok_rx, timeout_ms=1500)
+    if not ok:
+        if saw_hdr:
+            log.info("Quick note header present but no OK found (might have auto-dismissed).")
         else:
-            safe_click(ok_btn, "step_15_quick_note_ok_click_fallback_patchright", page)
-        snap_and_annotate(page, [abox], "step_15_quick_note_ok_target")
-        return True
-
-    except PWTimeoutError:
-        log.info("No 'Quick note' screen detected (timeout).")
+            log.info("No Quick note page detected.")
         return False
+
+    box = bbox(ok)
+    cx = box[0] + box[2] / 2.0
+    cy = box[1] + box[3] / 2.0
+    if _HAS_PYAUTO:
+        _pyauto_move_css(page, cx, cy, "step_15_quick_note_ok_move")
+        time.sleep(0.35)
+        _pyauto_click_css(page, cx, cy, "step_15_quick_note_ok_click")
+        time.sleep(0.35)
+        _pyauto_click_css(page, cx, cy, "step_15_quick_note_ok_click")
+    else:
+        safe_click(ok, "step_15_quick_note_ok_click_fallback_patchright", page)
+    snap_and_annotate(page, [box], "step_15_quick_note_ok_target")
+    return True
+
+
+def handle_skip_for_now(page) -> bool:
+    """Dismiss passkey prompt by clicking 'Skip for now' (buttons only)."""
+    rx = re.compile(r"^Skip for now$", re.I)
+    loc = _find_button_any(page, rx, timeout_ms=2500)
+    if not loc:
+        log.info("No 'Skip for now' found.")
+        return False
+
+    box = bbox(loc)
+    cx = box[0] + box[2] / 2.0
+    cy = box[1] + box[3] / 2.0
+    if _HAS_PYAUTO:
+        _pyauto_move_css(page, cx, cy, "step_16_passkey_skip_move")
+        time.sleep(0.35)
+        _pyauto_click_css(page, cx, cy, "step_16_passkey_skip_click")
+    else:
+        safe_click(loc, "step_16_passkey_skip_click_fallback_patchright", page)
+    snap_and_annotate(page, [box], "step_16_passkey_skip_target")
+    return True
 
 
 def handle_stay_signed_in(page) -> bool:
-    """Optionally dismiss 'Stay signed in?' by clicking No."""
-    try:
-        no_btn = None
-        for ctx in [page, *page.frames]:
-            cand = ctx.get_by_role("button", name=re.compile(r"^No$", re.I)).first
-            if cand.count():
-                cand.wait_for(state="visible", timeout=2000)
-                no_btn = cand
-                break
-        if no_btn is None:
-            log.info("No 'Stay signed in?' dialog detected.")
-            return False
-
-        nbox = bbox(no_btn)
-        nx = nbox[0] + nbox[2] / 2.0
-        ny = nbox[1] + nbox[3] / 2.0
-        if _HAS_PYAUTO:
-            _pyauto_move_css(page, nx, ny, "step_16_stay_signed_in_no_move")
-            time.sleep(0.4)
-            _pyauto_click_css(page, nx, ny, "step_16_stay_signed_in_no_click")
-        else:
-            safe_click(no_btn, "step_16_stay_signed_in_no_click_fallback_patchright", page)
-        snap_and_annotate(page, [nbox], "step_16_stay_signed_in_no_target")
-        return True
-
-    except PWTimeoutError:
-        log.info("No 'Stay signed in?' dialog detected (timeout).")
+    """Dismiss 'Stay signed in?' by clicking 'No' (buttons only)."""
+    no_rx = re.compile(r"^No(,?\s*thanks)?$", re.I)
+    loc = _find_button_any(page, no_rx, timeout_ms=3000)
+    if not loc:
+        log.info("No 'Stay signed in' screen detected.")
         return False
+
+    box = bbox(loc)
+    cx = box[0] + box[2] / 2.0
+    cy = box[1] + box[3] / 2.0
+    if _HAS_PYAUTO:
+        _pyauto_move_css(page, cx, cy, "step_17_stay_signed_in_no_move")
+        time.sleep(0.35)
+        _pyauto_click_css(page, cx, cy, "step_17_stay_signed_in_no_click")
+    else:
+        safe_click(loc, "step_17_stay_signed_in_no_click_fallback_patchright", page)
+    snap_and_annotate(page, [box], "step_17_stay_signed_in_no_target")
+    return True
 
 
 def run(playwright: Playwright):
@@ -488,7 +527,6 @@ def run(playwright: Playwright):
         page.goto(BASE_URL)
         page.bring_to_front()
 
-        # Calibrate CSS->screen mapping (NEW)
         _update_css_screen_calibration(page)
 
         snap_and_annotate(page, [], "step_00_open")
@@ -522,19 +560,47 @@ def run(playwright: Playwright):
 
         _pyauto_move_css(page, nx_css, ny_css, "step_12a_mouse_to_next_names")
         safe_click(names_next, "step_12_next_after_names", page)
-        time.sleep(5)
+        time.sleep(10)
 
         try:
             solve_human_check(page)
         except PWTimeoutError:
             log.warning("Accessible challenge not found skipping as site may differ.")
             log.info(PWTimeoutError.message)
-        time.sleep(10)
+        time.sleep(20)
 
-        handled_quick_note = handle_quick_note(page)
-        handled_stay_signed_in = handle_stay_signed_in(page)
-        log.info("OPTIONAL | quick_note=%s stay_signed_in=%s",
-                 handled_quick_note, handled_stay_signed_in)
+        try:
+            page.wait_for_load_state("networkidle", timeout=5000)
+        except PWTimeoutError:
+            pass
+        time.sleep(0.3)
+
+        try:
+            handled_qn = handle_quick_note(page)
+            if handled_qn:
+                try:
+                    page.wait_for_load_state("networkidle", timeout=3000)
+                except PWTimeoutError:
+                    pass
+                time.sleep(0.3)
+
+            handled_passkey = handle_skip_for_now(page)
+            if handled_passkey:
+                try:
+                    page.wait_for_load_state("networkidle", timeout=3000)
+                except PWTimeoutError:
+                    pass
+                time.sleep(0.3)
+
+            handled_stay = handle_stay_signed_in(page)
+            if handled_stay:
+                try:
+                    page.wait_for_load_state("networkidle", timeout=3000)
+                except PWTimeoutError:
+                    pass
+                time.sleep(0.3)
+        except Exception as e:
+            log.warning("Optional-screen pipeline error: %s", e)
 
         log.info("ACCOUNT | email=%s | password=%s", EMAIL, PASSWORD)
 
